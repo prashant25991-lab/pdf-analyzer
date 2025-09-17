@@ -21,33 +21,60 @@ class PDFAnalyzer:
                 'error': None,
                 'total_pages': len(doc),
                 'total_images': 0,
+                'total_placements': 0,
+                'unique_images': 0,
                 'images': []
             }
             
-            image_count = 0
+            placement_count = 0
+            processed_xrefs = set()
             
             # Process each page
             for page_num in range(len(doc)):
                 page = doc[page_num]
                 image_list = page.get_images(full=True)
                 
+                # Process each unique image on this page
                 for img_index, img in enumerate(image_list):
-                    image_count += 1
-                    
-                    # Extract image data
                     xref = img[0]  # Image reference number
+                    
+                    # Track unique images
+                    if xref not in processed_xrefs:
+                        processed_xrefs.add(xref)
+                    
+                    # Get all placement rectangles for this image on this page
+                    try:
+                        rects = page.get_image_rects(xref)
+                        if not rects:
+                            # Skip if no placement rects found - can't calculate visible DPI
+                            self.logger.warning(f"No placement rectangles found for xref {xref} on page {page_num + 1}")
+                            continue
+                    except Exception as e:
+                        self.logger.warning(f"Could not get image rects for xref {xref}: {str(e)}")
+                        continue
+                    
+                    # Create pixmap once per xref for efficiency
                     pix = fitz.Pixmap(doc, xref)
                     
-                    # Get image properties
-                    img_data = self._analyze_image(doc, xref, pix, page_num + 1, image_count)
-                    
-                    if img_data:
-                        result['images'].append(img_data)
+                    # Process each placement of this image
+                    for placement_index, rect in enumerate(rects):
+                        placement_count += 1
+                        
+                        # Get image properties with placement information
+                        img_data = self._analyze_image_placement(
+                            doc, xref, pix, page_num + 1, placement_count, 
+                            rect, placement_index + 1, len(rects)
+                        )
+                        
+                        if img_data:
+                            result['images'].append(img_data)
                     
                     # Clean up pixmap
                     pix = None
             
-            result['total_images'] = len(result['images'])
+            result['total_images'] = len(result['images'])  # Total placements
+            result['total_placements'] = len(result['images'])
+            result['unique_images'] = len(processed_xrefs)
             doc.close()
             
             return result
@@ -61,25 +88,54 @@ class PDFAnalyzer:
                 'images': []
             }
     
-    def _analyze_image(self, doc, xref, pix, page_num, img_number):
-        """Analyze individual image properties"""
+    def _analyze_image_placement(self, doc, xref, pix, page_num, placement_number, rect, placement_index, total_placements):
+        """Analyze individual image placement properties including visible DPI"""
         try:
+            # Calculate placement dimensions in inches (PDF points to inches: 1 inch = 72 points)
+            placed_width_in = rect.width / 72.0 if rect.width > 0 else None
+            placed_height_in = rect.height / 72.0 if rect.height > 0 else None
+            
+            # Calculate effective DPI based on actual placement
+            if placed_width_in and placed_height_in and placed_width_in > 0 and placed_height_in > 0:
+                eff_ppi_x = pix.width / placed_width_in
+                eff_ppi_y = pix.height / placed_height_in
+                visible_dpi = min(eff_ppi_x, eff_ppi_y)  # Use the limiting dimension
+            else:
+                eff_ppi_x = None
+                eff_ppi_y = None
+                visible_dpi = None
+            
             img_data = {
                 'page': page_num,
-                'image_number': img_number,
+                'image_number': placement_number,
+                'placement_index': placement_index,
+                'total_placements_of_image': total_placements,
                 'xref': xref,
-                'width': pix.width,
-                'height': pix.height,
+                'width': pix.width,  # Native pixel width
+                'height': pix.height,  # Native pixel height
+                'placed_width_in': round(placed_width_in, 3) if placed_width_in else None,
+                'placed_height_in': round(placed_height_in, 3) if placed_height_in else None,
+                'placed_width_points': round(rect.width, 1),
+                'placed_height_points': round(rect.height, 1),
+                'eff_ppi_x': round(eff_ppi_x, 1) if eff_ppi_x else None,
+                'eff_ppi_y': round(eff_ppi_y, 1) if eff_ppi_y else None,
+                'visible_dpi': round(visible_dpi, 1) if visible_dpi else None,
                 'channels': pix.n,
                 'format': None,
                 'color_mode': self._get_color_mode(pix),
-                'dpi': None,
+                'metadata_dpi': None,  # Original embedded DPI
                 'bit_depth': None,
                 'file_size': 0,
                 'preview_base64': None,
-                'dpi_method': 'estimated',
+                'dpi_method': 'visible_calculated',
                 'pixel_density': (pix.width * pix.height) / 1000000.0,  # Megapixels
                 'original_colorspace': None,
+                'placement_rect': {
+                    'x0': round(rect.x0, 1),
+                    'y0': round(rect.y0, 1), 
+                    'x1': round(rect.x1, 1),
+                    'y1': round(rect.y1, 1)
+                },
                 'error': None
             }
             
@@ -89,20 +145,19 @@ class PDFAnalyzer:
                 img_data['file_size'] = len(img_dict['image'])
                 img_data['format'] = img_dict['ext'].upper()
                 
-                # Try to get DPI from original image
+                # Try to get metadata DPI from original image
                 if img_dict['ext'] in ['jpg', 'jpeg', 'png', 'tiff']:
-                    dpi = self._extract_dpi_from_image_data(img_dict['image'], img_dict['ext'])
-                    if dpi:
-                        img_data['dpi'] = dpi
-                        img_data['dpi_method'] = 'extracted'
+                    metadata_dpi = self._extract_dpi_from_image_data(img_dict['image'], img_dict['ext'])
+                    if metadata_dpi:
+                        img_data['metadata_dpi'] = metadata_dpi
+                        img_data['dpi_method'] = 'visible_calculated + metadata_extracted'
                 
             except Exception as e:
                 self.logger.warning(f"Could not extract original image data: {str(e)}")
             
-            # Estimate DPI if not found
-            if not img_data['dpi']:
-                img_data['dpi'] = self._estimate_dpi(pix.width, pix.height)
-                img_data['dpi_method'] = 'estimated'
+            # Estimate metadata DPI if not found (keep for reference)
+            if not img_data['metadata_dpi']:
+                img_data['metadata_dpi'] = self._estimate_dpi(pix.width, pix.height)
             
             # Get bit depth
             img_data['bit_depth'] = 8  # Most common, could be refined
@@ -116,16 +171,20 @@ class PDFAnalyzer:
             return img_data
             
         except Exception as e:
-            self.logger.error(f"Error analyzing image {img_number}: {str(e)}")
+            self.logger.error(f"Error analyzing image placement {placement_number}: {str(e)}")
             return {
                 'page': page_num,
-                'image_number': img_number,
+                'image_number': placement_number,
+                'placement_index': placement_index,
                 'error': str(e),
                 'width': 0,
                 'height': 0,
-                'dpi': None,
+                'visible_dpi': 0,
+                'metadata_dpi': None,
                 'color_mode': 'Unknown',
-                'file_size': 0
+                'file_size': 0,
+                'placed_width_in': 0,
+                'placed_height_in': 0
             }
     
     def _get_color_mode(self, pix):

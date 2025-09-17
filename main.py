@@ -442,10 +442,14 @@ def display_results(results, min_dpi, preferred_modes):
     
     with col3:
         if results['total_images'] > 0:
-            avg_dpi = sum(img['dpi'] for img in results['images'] if img['dpi']) / len([img for img in results['images'] if img['dpi']])
-            st.metric("Average DPI", f"{avg_dpi:.0f}")
+            visible_dpis = [img['visible_dpi'] for img in results['images'] if img.get('visible_dpi')]
+            if visible_dpis:
+                avg_visible_dpi = sum(visible_dpis) / len(visible_dpis)
+                st.metric("Average Visible DPI", f"{avg_visible_dpi:.0f}")
+            else:
+                st.metric("Average Visible DPI", "N/A")
         else:
-            st.metric("Average DPI", "N/A")
+            st.metric("Average Visible DPI", "N/A")
     
     with col4:
         # Overall pass/fail status
@@ -504,13 +508,13 @@ def display_results(results, min_dpi, preferred_modes):
 
 
 def determine_overall_status(results, min_dpi, preferred_modes):
-    """Determine overall pass/fail status"""
+    """Determine overall pass/fail status based on visible DPI"""
     if results['total_images'] == 0:
         return "N/A"
     
     for img in results['images']:
-        # Check DPI
-        if img.get('dpi') and img['dpi'] < min_dpi:
+        # Check VISIBLE DPI (what matters for print quality)
+        if img.get('visible_dpi') and img['visible_dpi'] < min_dpi:
             return "FAIL"
         
         # Check color mode
@@ -526,11 +530,19 @@ def display_recommendations(results, min_dpi, preferred_modes):
     issues = []
     recommendations = []
     
-    # Check for DPI issues
-    low_dpi_images = [img for img in results['images'] if img.get('dpi') and img['dpi'] < min_dpi]
+    # Check for low VISIBLE DPI issues (what matters for print quality)
+    low_dpi_images = [img for img in results['images'] if img.get('visible_dpi') and img['visible_dpi'] < min_dpi]
     if low_dpi_images:
-        issues.append(f"{len(low_dpi_images)} image(s) have DPI below {min_dpi}")
-        recommendations.append("Increase image resolution or use higher quality images")
+        issues.append(f"{len(low_dpi_images)} image placement(s) have visible DPI below {min_dpi}")
+        recommendations.append("Increase image size in document or use higher resolution source images")
+    
+    # Check for images scaled too large
+    over_scaled_images = [img for img in results['images'] 
+                         if img.get('visible_dpi') and img.get('metadata_dpi') 
+                         and img['visible_dpi'] < img['metadata_dpi'] * 0.7]
+    if over_scaled_images:
+        issues.append(f"{len(over_scaled_images)} image(s) are scaled larger than recommended")
+        recommendations.append("Consider using higher resolution source images or reducing placed size")
     
     # Check for color space issues
     wrong_color_images = [img for img in results['images'] if img.get('color_mode') and img['color_mode'] not in preferred_modes]
@@ -540,7 +552,7 @@ def display_recommendations(results, min_dpi, preferred_modes):
         recommendations.append(f"Convert images to preferred color spaces: {', '.join(preferred_modes)}")
     
     # Check for missing image data
-    unknown_images = [img for img in results['images'] if not img.get('dpi') or not img.get('color_mode')]
+    unknown_images = [img for img in results['images'] if not img.get('visible_dpi') or not img.get('color_mode')]
     if unknown_images:
         issues.append(f"{len(unknown_images)} image(s) could not be fully analyzed")
         recommendations.append("Ensure images are properly embedded and not corrupted")
@@ -575,12 +587,12 @@ def display_image_grid(images, min_dpi, preferred_modes):
     high_quality_count = 0
     
     for img in images:
-        dpi = img.get('dpi', 0)
+        visible_dpi = img.get('visible_dpi', 0)
         color_mode = img.get('color_mode', '')
         
-        if (dpi and dpi >= min_dpi) and (color_mode in preferred_modes):
+        if (visible_dpi and visible_dpi >= min_dpi) and (color_mode in preferred_modes):
             pass_count += 1
-        if dpi and dpi >= 300:
+        if visible_dpi and visible_dpi >= 300:
             high_quality_count += 1
     
     # Display summary

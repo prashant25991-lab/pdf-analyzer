@@ -4,10 +4,14 @@ import sys
 import os
 
 # Streamlit app configuration for py2app
-APP = ['main.py']
+APP = ['app_launcher.py']
 
 # Data files to include with the app
-DATA_FILES = []
+DATA_FILES = [
+    'main.py',
+    'pdf_analyzer.py', 
+    'utils.py'
+]
 
 # Options for py2app
 OPTIONS = {
@@ -18,25 +22,27 @@ OPTIONS = {
         'PIL',
         'fitz',
         'numpy',
-        'io',
-        'base64',
-        'logging',
-        'struct'
+        'socket',
+        'threading',
+        'webbrowser'
     ],
     'includes': [
         'pdf_analyzer',
         'utils',
-        'streamlit.runtime.scriptrunner',
         'streamlit.web.cli',
+        'fitz',
+        'PIL.Image'
     ],
     'excludes': [
         'tkinter',
         'matplotlib',
         'jupyter',
         'IPython',
-        'pytest'
+        'pytest',
+        'sphinx',
+        'docutils'
     ],
-    'resources': [],
+    'resources': DATA_FILES,
     'iconfile': None,  # We'll create an icon later
     'plist': {
         'CFBundleName': 'PDF Preflight Tool',
@@ -49,14 +55,15 @@ OPTIONS = {
         'LSUIElement': False,
         'NSAppTransportSecurity': {
             'NSAllowsArbitraryLoads': True
-        }
+        },
+        'NSAppleEventsUsageDescription': 'This app needs to open your default web browser.'
     }
 }
 
 setup(
     name='PDF Preflight Tool',
     app=APP,
-    data_files=DATA_FILES,
+    data_files=[],  # Resources handled by py2app options
     options={'py2app': OPTIONS},
     setup_requires=['py2app'],
 )

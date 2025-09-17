@@ -1,0 +1,6 @@
+streamlit>=1.28.0
+pandas>=2.0.0
+pillow>=10.0.0
+pymupdf>=1.24.0
+py2app>=0.28.0
+dmgbuild>=1.6.0

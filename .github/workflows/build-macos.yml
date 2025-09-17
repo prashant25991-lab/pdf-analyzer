@@ -1,0 +1,40 @@
+≈name: Build macOS DMG
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build DMG
+        run: |
+          source venv/bin/activate
+          # Replace build_dmg.py with your DMG build script if you have one
+          python build_dmg.py
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v3
+        with:
+          name: PDF-Analyzer-DMG
+          path: dist/*.dmg  # Adjust if your DMG output folder is different
+

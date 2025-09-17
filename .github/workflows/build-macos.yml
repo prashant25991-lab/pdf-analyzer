@@ -1,4 +1,11 @@
+name: Build macOS D
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 name: Build macOS DMG
+
 on:
   push:
     branches:
@@ -28,11 +35,11 @@ jobs:
       - name: Build DMG
         run: |
           source venv/bin/activate
-          # Replace build_dmg.py with your DMG build script if you have one
+          # Make sure you have build_dmg.py in your repo
           python build_dmg.py
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: PDF-Analyzer-DMG
           path: dist/*.dmg  # Adjust if your DMG output folder is different

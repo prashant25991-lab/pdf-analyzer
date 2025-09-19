@@ -1,0 +1,39 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build DMG
+        run: |
+          mkdir -p dist
+          # Replace this with your app build command
+          # For example, if your build produces "PDF Analyzer.app" in ./dist:
+          hdiutil create -volname "PDF Analyzer" \
+            -srcfolder ./dist \
+            -ov -format UDZO "PDF-Analyzer.dmg"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Analyzer-DMG
+          path: PDF-Analyzer.dmg

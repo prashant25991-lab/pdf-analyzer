@@ -1,46 +1,38 @@
-name: Build macOS D
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
 name: Build macOS DMG
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # allows manual trigger
 
 jobs:
-  build-dmg:
+  build:
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Python (if your app uses Python)
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          python3 -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Build DMG
         run: |
-          source venv/bin/activate
-          # Make sure you have build_dmg.py in your repo
-          python build_dmg.py
+          # Example for a Python app with py2app:
+          python3 setup.py py2app
+          mkdir -p dist/dmg
+          hdiutil create -volname "MyApp" -srcfolder "dist" -ov -format UDZO "dist/dmg/MyApp.dmg"
 
-      - name: Upload DMG
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PDF-Analyzer-DMG
-          path: dist/*.dmg  # Adjust if your DMG output folder is different
-
+          name: macos-dmg
+          path: dist/dmg/*.dmg

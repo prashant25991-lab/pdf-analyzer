@@ -7,32 +7,69 @@ on:
   workflow_dispatch: # allows manual trigger
 
 jobs:
-  build:
+  build-dmg:
     runs-on: macos-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python (if your app uses Python)
+      # 2. Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # 3. Install dependencies
+ name: Build macOS DMG
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # allows manual trigger
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Install dependencies
       - name: Install dependencies
         run: |
-          python3 -m pip install --upgrade pip
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip setuptools wheel
+          pip install --upgrade py2app
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+      # 4. Build DMG
       - name: Build DMG
         run: |
-          # Example for a Python app with py2app:
-          python3 setup.py py2app
+          source venv/bin/activate
+          # Run build_dmg.py if it exists
+          if [ -f build_dmg.py ]; then python build_dmg.py; fi
+          # Run py2app as fallback
+          if [ -f setup.py ]; then python3 setup.py py2app; fi
+          # Create DMG
           mkdir -p dist/dmg
-          hdiutil create -volname "MyApp" -srcfolder "dist" -ov -format UDZO "dist/dmg/MyApp.dmg"
+          hdiutil create -volname "PDF-Analyzer" -srcfolder "dist" -ov -format UDZO "dist/dmg/PDF-Analyzer.dmg"
 
+      # 5. Upload DMG artifact
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg
+          name: PDF-Analyzer-DMG
           path: dist/dmg/*.dmg
+
